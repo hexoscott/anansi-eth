@@ -126,13 +126,18 @@ func main() {
 	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	for _, job := range allJobs {
-		s := job.Stop()
+	doneChans := make([]<-chan struct{}, len(allJobs))
+	for i, job := range allJobs {
+		doneChans[i] = job.Stop()
+	}
+
+	for i, doneChan := range doneChans {
 		select {
 		case <-timeout.Done():
-			log.Error("timed out waiting for job to finish", "name", job.Name())
-		case <-s:
-			log.Info("job finished", "name", job.Name())
+			log.Error("timed out waiting for jobs to finish")
+			return
+		case <-doneChan:
+			log.Info("job finished", "name", allJobs[i].Name())
 		}
 	}
 }
@@ -156,6 +161,14 @@ func createJobs() ([]jobs.Job, error) {
 			return result, err
 		}
 		result = append(result, goodSender)
+	}
+
+	for i := 0; i < 10; i++ {
+		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, noWaitSender)
 	}
 
 	monitor, err := jobs.NewMonitor()

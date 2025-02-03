@@ -67,7 +67,7 @@ func (a *AlreadyExists) Run(client *ethclient.Client, log hclog.Logger) error {
 		return err
 	}
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(logInterval)
 	defer ticker.Stop()
 
 	totalSent := 0

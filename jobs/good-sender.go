@@ -47,7 +47,7 @@ func (g *GoodSender) Run(client *ethclient.Client, log hclog.Logger) error {
 
 	totalSent := 0
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(logInterval)
 	defer ticker.Stop()
 
 	for {
@@ -84,6 +84,7 @@ func (g *GoodSender) Run(client *ethclient.Client, log hclog.Logger) error {
 				select {
 				case <-g.quit:
 					log.Info("received signal, stopping")
+					close(g.done)
 					return nil
 				default:
 				}
