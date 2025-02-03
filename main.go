@@ -146,7 +146,7 @@ func createJobs() ([]jobs.Job, error) {
 	result := []jobs.Job{}
 
 	// create 10 already exists jobs
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
 		if err != nil {
 			return result, err
@@ -163,12 +163,20 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, goodSender)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
 		if err != nil {
 			return result, err
 		}
 		result = append(result, noWaitSender)
+	}
+
+	for i := 0; i < 50; i++ {
+		nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, nonceGapSender)
 	}
 
 	monitor, err := jobs.NewMonitor()
