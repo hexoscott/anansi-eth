@@ -1,6 +1,8 @@
 # anansi-eth
 A trickster app to try and break Ethereum mempools
 
+![image](./anansi-bot.webp)
+
 ## Running
 For now you will need to edit the code to adjust how many jobs run of each type using the `createJobs` function in `main.go`.
 
