@@ -44,10 +44,11 @@ func NewAlreadyExists(instance uint64) (*AlreadyExists, error) {
 	}, nil
 }
 
-func (a *AlreadyExists) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int) {
+func (a *AlreadyExists) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
 	a.Config.Address = address
 	a.Config.Key = privateKey
 	a.Config.ChainID = chainID
+	a.Config.GasPrice = gasPrice
 }
 
 func (a *AlreadyExists) Run(client *ethclient.Client, log hclog.Logger) error {
@@ -60,7 +61,7 @@ func (a *AlreadyExists) Run(client *ethclient.Client, log hclog.Logger) error {
 		return err
 	}
 
-	tx := types.NewTransaction(nonce+1, randomAddress, big.NewInt(1000), 21000, big.NewInt(10000000000), nil)
+	tx := types.NewTransaction(nonce+1, randomAddress, big.NewInt(1000), 21000, a.Config.GasPrice, nil)
 
 	tx, err = types.SignTx(tx, types.NewEIP155Signer(a.Config.ChainID), a.Config.Key)
 	if err != nil {

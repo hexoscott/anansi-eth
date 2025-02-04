@@ -64,7 +64,7 @@ func (g *GoodSender) Run(client *ethclient.Client, log hclog.Logger) error {
 
 			randomAddress := common.HexToAddress(fmt.Sprintf("0x%x", rand.Intn(1000000000000000000)))
 
-			tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, big.NewInt(2000000000), nil)
+			tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, g.Config.GasPrice, nil)
 
 			tx, err = types.SignTx(tx, types.NewEIP155Signer(g.Config.ChainID), g.Config.Key)
 			if err != nil {

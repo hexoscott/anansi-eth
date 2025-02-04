@@ -14,34 +14,33 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
-type NoWaitSender struct {
-	Config   NoWaitSenderConfig
+type NonceTooHighSender struct {
+	Config   NonceTooHighSenderConfig
 	quit     chan struct{}
 	done     chan struct{}
 	instance uint64
 }
 
-type NoWaitSenderConfig struct {
+type NonceTooHighSenderConfig struct {
 	JobConfig
 }
 
-func NewNoWaitSender(instance uint64) (*NoWaitSender, error) {
-	return &NoWaitSender{
-		Config:   NoWaitSenderConfig{},
+func NewNonceTooHighSender(instance uint64) (*NonceTooHighSender, error) {
+	return &NonceTooHighSender{
+		Config:   NonceTooHighSenderConfig{},
 		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 		instance: instance,
 	}, nil
 }
 
-func (n *NoWaitSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
+func (n *NonceTooHighSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int) {
 	n.Config.Address = address
 	n.Config.Key = privateKey
 	n.Config.ChainID = chainID
-	n.Config.GasPrice = gasPrice
 }
 
-func (n *NoWaitSender) Run(client *ethclient.Client, log hclog.Logger) error {
+func (n *NonceTooHighSender) Run(client *ethclient.Client, log hclog.Logger) error {
 	log = log.With("job", n.Name(), "instance", n.instance)
 
 	totalSent := 0
@@ -67,7 +66,9 @@ func (n *NoWaitSender) Run(client *ethclient.Client, log hclog.Logger) error {
 				return err
 			}
 
-			for i := 0; i < 300; i++ {
+			nonce++
+
+			for i := 0; i < 100; i++ {
 				select {
 				case <-n.quit:
 					log.Info("received signal, stopping")
@@ -100,11 +101,11 @@ func (n *NoWaitSender) Run(client *ethclient.Client, log hclog.Logger) error {
 	}
 }
 
-func (n *NoWaitSender) Stop() <-chan struct{} {
+func (n *NonceTooHighSender) Stop() <-chan struct{} {
 	close(n.quit)
 	return n.done
 }
 
-func (n *NoWaitSender) Name() string {
-	return "no-wait-sender"
+func (n *NonceTooHighSender) Name() string {
+	return "nonce-too-high-sender"
 }

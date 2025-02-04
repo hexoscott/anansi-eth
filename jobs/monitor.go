@@ -67,7 +67,7 @@ func (j *Monitor) Stop() <-chan struct{} {
 	return j.done
 }
 
-func (j *Monitor) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int) {
+func (j *Monitor) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
 	// no op
 }
 

@@ -34,10 +34,11 @@ func NewNonceGapSender(instance uint64) (*NonceGapSender, error) {
 	}, nil
 }
 
-func (n *NonceGapSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int) {
+func (n *NonceGapSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
 	n.Config.Address = address
 	n.Config.Key = privateKey
 	n.Config.ChainID = chainID
+	n.Config.GasPrice = gasPrice
 }
 
 func (n *NonceGapSender) Run(client *ethclient.Client, log hclog.Logger) error {
@@ -82,7 +83,7 @@ func (n *NonceGapSender) Run(client *ethclient.Client, log hclog.Logger) error {
 				default:
 				}
 
-				tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, big.NewInt(2000000000), nil)
+				tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, n.Config.GasPrice, nil)
 
 				tx, err = types.SignTx(tx, types.NewEIP155Signer(n.Config.ChainID), n.Config.Key)
 				if err != nil {

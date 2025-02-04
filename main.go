@@ -26,8 +26,12 @@ var (
 	privateKey string
 	rpcURL     string
 
-	fundAmount = big.NewInt(1000000000000000000)
+	fundAmount = big.NewInt(0)
 )
+
+func init() {
+	fundAmount.SetString("20000000000000000000", 10)
+}
 
 type Wallet struct {
 	Address    *common.Address
@@ -75,19 +79,27 @@ func main() {
 		return
 	}
 
+	gasPrice, err := client.SuggestGasPrice(context.Background())
+	if err != nil {
+		log.Error("failed to suggest gas price", "error", err)
+		return
+	}
+	log.Info("suggested gas price", "price", gasPrice)
+
 	allJobs, err := createJobs()
 	if err != nil {
 		log.Error("failed to create jobs", "error", err)
 		return
 	}
 
-	chainID, err := client.NetworkID(context.Background())
-	if err != nil {
-		log.Error("failed to get chain id", "error", err)
-		return
-	}
+	// chainID, err := client.NetworkID(context.Background())
+	// if err != nil {
+	// 	log.Error("failed to get chain id", "error", err)
+	// 	return
+	// }
+	chainID := big.NewInt(779)
 
-	fundingHashes, walletKeys, err := fundWallets(client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, log)
+	fundingHashes, walletKeys, err := fundWallets(client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, gasPrice, log)
 	if err != nil {
 		log.Error("failed to fund wallets", "error", err)
 		return
@@ -108,7 +120,7 @@ func main() {
 
 	for i, job := range allJobs {
 		wallet := walletKeys[i]
-		job.SetWallet(wallet.Address, wallet.PrivateKey, chainID)
+		job.SetWallet(wallet.Address, wallet.PrivateKey, chainID, gasPrice)
 		go func(j jobs.Job, wallet Wallet) {
 			log.Info("starting job", "name", j.Name(), "address", wallet.Address.Hex())
 			err = j.Run(client, log)
@@ -146,37 +158,54 @@ func createJobs() ([]jobs.Job, error) {
 	result := []jobs.Job{}
 
 	// create 10 already exists jobs
-	for i := 0; i < 50; i++ {
-		alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, alreadyExists)
-	}
+	// for i := 0; i < 10; i++ {
+	// 	alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
+	// 	if err != nil {
+	// 		return result, err
+	// 	}
+	// 	result = append(result, alreadyExists)
+	// }
 
 	// create 10 good sender jobs
-	for i := 0; i < 600; i++ {
-		goodSender, err := jobs.NewGoodSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, goodSender)
-	}
+	// for i := 0; i < 10; i++ {
+	// 	goodSender, err := jobs.NewGoodSender(uint64(i))
+	// 	if err != nil {
+	// 		return result, err
+	// 	}
+	// 	result = append(result, goodSender)
+	// }
 
-	for i := 0; i < 50; i++ {
-		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, noWaitSender)
-	}
+	// for i := 0; i < 50; i++ {
+	// 	noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
+	// 	if err != nil {
+	// 		return result, err
+	// 	}
+	// 	result = append(result, noWaitSender)
+	// }
 
-	for i := 0; i < 50; i++ {
-		nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
+	// for i := 0; i < 10; i++ {
+	// 	nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
+	// 	if err != nil {
+	// 		return result, err
+	// 	}
+	// 	result = append(result, nonceGapSender)
+	// }
+
+	// for i := 0; i < 10; i++ {
+	// 	multiSender, err := jobs.NewMultiSender(uint64(i))
+	// 	if err != nil {
+	// 		return result, err
+	// 	}
+	// 	result = append(result, multiSender)
+	// }
+
+	// state filler jobs
+	for i := 0; i < 10; i++ {
+		stateFiller, err := jobs.NewStateFiller(uint64(i))
 		if err != nil {
 			return result, err
 		}
-		result = append(result, nonceGapSender)
+		result = append(result, stateFiller)
 	}
 
 	monitor, err := jobs.NewMonitor()
@@ -208,15 +237,11 @@ func fundWallet(
 	destAddress *common.Address,
 	value *big.Int,
 	chainID *big.Int,
+	gasPrice *big.Int,
 ) (common.Hash, error) {
-	gasPrice, err := client.SuggestGasPrice(context.Background())
-	if err != nil {
-		return common.Hash{}, err
-	}
-
 	tx := types.NewTransaction(nonce, *destAddress, value, 21000, gasPrice, []byte{})
 
-	tx, err = types.SignTx(tx, types.NewEIP155Signer(chainID), parentKey)
+	tx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), parentKey)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -237,6 +262,7 @@ func fundWallets(
 	count int,
 	amount *big.Int,
 	chainID *big.Int,
+	gasPrice *big.Int,
 	log hclog.Logger,
 ) ([]common.Hash, []Wallet, error) {
 	wallets := make([]Wallet, count)
@@ -251,7 +277,7 @@ func fundWallets(
 			PrivateKey: privateKey,
 		}
 		log.Info("created wallet", "address", address.Hex())
-		hash, err := fundWallet(client, nonce, parentAddress, parentKey, address, amount, chainID)
+		hash, err := fundWallet(client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
 		if err != nil {
 			return nil, nil, err
 		}
