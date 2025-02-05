@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	fundAmount.SetString("20000000000000000000", 10)
+	fundAmount.SetString("90000000000000000000", 10)
 }
 
 type Wallet struct {
@@ -157,31 +157,29 @@ func main() {
 func createJobs() ([]jobs.Job, error) {
 	result := []jobs.Job{}
 
-	// create 10 already exists jobs
-	// for i := 0; i < 10; i++ {
-	// 	alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
-	// 	if err != nil {
-	// 		return result, err
-	// 	}
-	// 	result = append(result, alreadyExists)
-	// }
+	for i := 0; i < 5; i++ {
+		alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, alreadyExists)
+	}
 
-	// create 10 good sender jobs
-	// for i := 0; i < 10; i++ {
-	// 	goodSender, err := jobs.NewGoodSender(uint64(i))
-	// 	if err != nil {
-	// 		return result, err
-	// 	}
-	// 	result = append(result, goodSender)
-	// }
+	for i := 0; i < 10; i++ {
+		goodSender, err := jobs.NewGoodSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, goodSender)
+	}
 
-	// for i := 0; i < 50; i++ {
-	// 	noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
-	// 	if err != nil {
-	// 		return result, err
-	// 	}
-	// 	result = append(result, noWaitSender)
-	// }
+	for i := 0; i < 100; i++ {
+		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, noWaitSender)
+	}
 
 	// for i := 0; i < 10; i++ {
 	// 	nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
@@ -200,7 +198,7 @@ func createJobs() ([]jobs.Job, error) {
 	// }
 
 	// state filler jobs
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		stateFiller, err := jobs.NewStateFiller(uint64(i))
 		if err != nil {
 			return result, err

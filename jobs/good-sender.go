@@ -36,10 +36,11 @@ func NewGoodSender(instance uint64) (*GoodSender, error) {
 	}, nil
 }
 
-func (g *GoodSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int) {
+func (g *GoodSender) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
 	g.Config.Address = address
 	g.Config.Key = privateKey
 	g.Config.ChainID = chainID
+	g.Config.GasPrice = gasPrice
 }
 
 func (g *GoodSender) Run(client *ethclient.Client, log hclog.Logger) error {

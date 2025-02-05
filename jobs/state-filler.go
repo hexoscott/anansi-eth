@@ -62,6 +62,8 @@ func (g *StateFiller) Run(client *ethclient.Client, log hclog.Logger) error {
 				return err
 			}
 
+			log.Info("pending nonce", "nonce", nonce, "address", g.Config.Address.Hex())
+
 			// first deploy the contract
 			deployCode := common.FromHex(byteCode)
 			deployTx := types.NewContractCreation(nonce, big.NewInt(0), 5995000, g.Config.GasPrice, deployCode)
