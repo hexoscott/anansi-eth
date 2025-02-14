@@ -25,6 +25,8 @@ import (
 var (
 	privateKey string
 	rpcURL     string
+	gasless    bool
+	chainArg   uint64
 
 	fundAmount = big.NewInt(0)
 )
@@ -41,6 +43,8 @@ type Wallet struct {
 func main() {
 	flag.StringVar(&privateKey, "private-key", "", "main account private key used to fund accounts for the jobs")
 	flag.StringVar(&rpcURL, "rpc-url", "", "rpc url")
+	flag.BoolVar(&gasless, "gasless", false, "use gasless transactions")
+	flag.Uint64Var(&chainArg, "chain-id", 0, "chain id")
 	flag.Parse()
 
 	log := hclog.New(&hclog.LoggerOptions{
@@ -92,12 +96,16 @@ func main() {
 		return
 	}
 
-	// chainID, err := client.NetworkID(context.Background())
-	// if err != nil {
-	// 	log.Error("failed to get chain id", "error", err)
-	// 	return
-	// }
-	chainID := big.NewInt(779)
+	var chainID *big.Int
+	if chainArg == 0 {
+		chainID, err = client.NetworkID(context.Background())
+		if err != nil {
+			log.Error("failed to get chain id", "error", err)
+			return
+		}
+	} else {
+		chainID = big.NewInt(int64(chainArg))
+	}
 
 	fundingHashes, walletKeys, err := fundWallets(client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, gasPrice, log)
 	if err != nil {
@@ -105,17 +113,19 @@ func main() {
 		return
 	}
 
-	allMined, err := waitUntilMined(client, fundingHashes)
-	if err != nil {
-		log.Error("failed to wait for funding transactions to be mined", "error", err)
-		return
-	}
+	if !gasless {
+		allMined, err := waitUntilMined(client, fundingHashes)
+		if err != nil {
+			log.Error("failed to wait for funding transactions to be mined", "error", err)
+			return
+		}
 
-	if allMined {
-		log.Info("all funding transactions mined")
-	} else {
-		log.Error("failed to mine all funding transactions")
-		return
+		if allMined {
+			log.Info("all funding transactions mined")
+		} else {
+			log.Error("failed to mine all funding transactions")
+			return
+		}
 	}
 
 	for i, job := range allJobs {
@@ -165,7 +175,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, alreadyExists)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		goodSender, err := jobs.NewGoodSender(uint64(i))
 		if err != nil {
 			return result, err
@@ -173,7 +183,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, goodSender)
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 20; i++ {
 		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
 		if err != nil {
 			return result, err
@@ -181,29 +191,36 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, noWaitSender)
 	}
 
-	// for i := 0; i < 10; i++ {
-	// 	nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
-	// 	if err != nil {
-	// 		return result, err
-	// 	}
-	// 	result = append(result, nonceGapSender)
-	// }
+	for i := 0; i < 5; i++ {
+		nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, nonceGapSender)
+	}
 
-	// for i := 0; i < 10; i++ {
-	// 	multiSender, err := jobs.NewMultiSender(uint64(i))
-	// 	if err != nil {
-	// 		return result, err
-	// 	}
-	// 	result = append(result, multiSender)
-	// }
+	for i := 0; i < 5; i++ {
+		multiSender, err := jobs.NewMultiSender(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, multiSender)
+	}
 
-	// state filler jobs
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 1; i++ {
 		stateFiller, err := jobs.NewStateFiller(uint64(i))
 		if err != nil {
 			return result, err
 		}
 		result = append(result, stateFiller)
+	}
+
+	for i := 0; i < 50; i++ {
+		txReplacerWithGaps, err := jobs.NewTxReplacerWithGaps(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, txReplacerWithGaps)
 	}
 
 	monitor, err := jobs.NewMonitor()
@@ -275,13 +292,16 @@ func fundWallets(
 			PrivateKey: privateKey,
 		}
 		log.Info("created wallet", "address", address.Hex())
-		hash, err := fundWallet(client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
-		if err != nil {
-			return nil, nil, err
+
+		if !gasless {
+			hash, err := fundWallet(client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
+			if err != nil {
+				return nil, nil, err
+			}
+			log.Info("funded wallet", "address", address.Hex(), "hash", hash.Hex())
+			hashes[i] = hash
+			nonce++
 		}
-		log.Info("funded wallet", "address", address.Hex(), "hash", hash.Hex())
-		hashes[i] = hash
-		nonce++
 	}
 
 	return hashes, wallets, nil
