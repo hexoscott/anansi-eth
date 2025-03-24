@@ -175,7 +175,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, alreadyExists)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 20; i++ {
 		goodSender, err := jobs.NewGoodSender(uint64(i))
 		if err != nil {
 			return result, err
@@ -221,6 +221,14 @@ func createJobs() ([]jobs.Job, error) {
 			return result, err
 		}
 		result = append(result, txReplacerWithGaps)
+	}
+
+	for i := 0; i < 200; i++ {
+		gasPriceReader, err := jobs.NewGasPriceReader(uint64(i))
+		if err != nil {
+			return result, err
+		}
+		result = append(result, gasPriceReader)
 	}
 
 	monitor, err := jobs.NewMonitor()
