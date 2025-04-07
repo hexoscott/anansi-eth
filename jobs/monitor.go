@@ -1,8 +1,10 @@
 package jobs
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"time"
 
@@ -14,13 +16,11 @@ import (
 
 type Monitor struct {
 	Job
-	quit chan struct{}
 	done chan struct{}
 }
 
 func NewMonitor() (*Monitor, error) {
 	return &Monitor{
-		quit: make(chan struct{}),
 		done: make(chan struct{}),
 	}, nil
 }
@@ -29,41 +29,44 @@ func (j *Monitor) Name() string {
 	return "monitor"
 }
 
-func (j *Monitor) Run(client *ethclient.Client, log hclog.Logger) error {
+func (j *Monitor) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
+	defer close(j.done)
 	log = log.With("job", j.Name())
 	for {
 		select {
-		case <-j.quit:
-			j.done <- struct{}{}
+		case <-ctx.Done():
 			return nil
 		default:
-			var result json.RawMessage
-			err := client.Client().Call(&result, "txpool_status")
-			if err != nil {
-				log.Error("failed to call txpool_status", "error", err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			var status PoolStatus
-			if err := json.Unmarshal(result, &status); err != nil {
-				log.Error("failed to unmarshal txpool_status", "error", err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			baseFee, pending, queued, err := decodePoolStatus(status)
-			if err != nil {
-				log.Error("failed to decode pool status", "error", err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			log.Info("txpool_status", "baseFee", baseFee, "pending", pending, "queued", queued)
-			time.Sleep(3 * time.Second)
 		}
+
+		var result json.RawMessage
+		err := client.Client().Call(&result, "txpool_status")
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+			log.Error("failed to call txpool_status", "error", err)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		var status PoolStatus
+		if err := json.Unmarshal(result, &status); err != nil {
+			log.Error("failed to unmarshal txpool_status", "error", err)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		baseFee, pending, queued, err := decodePoolStatus(status)
+		if err != nil {
+			log.Error("failed to decode pool status", "error", err)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		log.Info("txpool_status", "baseFee", baseFee, "pending", pending, "queued", queued)
+		time.Sleep(3 * time.Second)
 	}
 }
 
-func (j *Monitor) Stop() <-chan struct{} {
-	close(j.quit)
+func (j *Monitor) WaitForStop() <-chan struct{} {
 	return j.done
 }
 
@@ -91,4 +94,8 @@ func decodePoolStatus(status PoolStatus) (uint64, uint64, uint64, error) {
 		return 0, 0, 0, err
 	}
 	return baseFee, pending, queued, nil
+}
+
+func (j *Monitor) Instance() uint64 {
+	return 0
 }

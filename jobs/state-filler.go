@@ -16,7 +16,6 @@ import (
 
 type StateFiller struct {
 	Config   StateFillerConfig
-	quit     chan struct{}
 	done     chan struct{}
 	instance uint64
 }
@@ -34,7 +33,6 @@ const sig = "0x7b3118e1"
 func NewStateFiller(instance uint64) (*StateFiller, error) {
 	return &StateFiller{
 		Config:   StateFillerConfig{},
-		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 		instance: instance,
 	}, nil
@@ -47,75 +45,85 @@ func (g *StateFiller) SetWallet(address *common.Address, privateKey *ecdsa.Priva
 	g.Config.GasPrice = gasPrice
 }
 
-func (g *StateFiller) Run(client *ethclient.Client, log hclog.Logger) error {
+func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
+	defer close(g.done)
 	log = log.With("job", g.Name(), "instance", g.instance)
 
 	for {
 		select {
-		case <-g.quit:
+		case <-ctx.Done():
 			log.Info("received signal, stopping")
-			close(g.done)
 			return nil
 		default:
-			nonce, err := client.PendingNonceAt(context.Background(), *g.Config.Address)
-			if err != nil {
-				return err
-			}
-
-			log.Info("pending nonce", "nonce", nonce, "address", g.Config.Address.Hex())
-
-			// first deploy the contract
-			deployCode := common.FromHex(byteCode)
-			deployTx := types.NewContractCreation(nonce, big.NewInt(0), 5995000, g.Config.GasPrice, deployCode)
-			deployTx, err = types.SignTx(deployTx, types.NewEIP155Signer(g.Config.ChainID), g.Config.Key)
-			if err != nil {
-				return err
-			}
-
-			err = client.SendTransaction(context.Background(), deployTx)
-			if err != nil {
-				return err
-			}
-
-			var contractAddress common.Address
-			receipt, err := waitForReceipt(client, deployTx.Hash())
-			if err != nil {
-				return err
-			}
-			contractAddress = receipt.ContractAddress
-
-			log.Info("deployed filler contract", "address", contractAddress.Hex())
-
-			// now loop 240 times to slowly remove from the contract state and leave 10 items behind to slowly build up the state tree
-			hashes := []common.Hash{}
-			for i := 0; i < 240; i++ {
-				nonce++
-				tx := types.NewTransaction(nonce, contractAddress, big.NewInt(0), 30000, g.Config.GasPrice, common.FromHex(sig))
-				tx, err = types.SignTx(tx, types.NewEIP155Signer(g.Config.ChainID), g.Config.Key)
-				if err != nil {
-					return err
-				}
-
-				err = client.SendTransaction(context.Background(), tx)
-				if err != nil {
-					return err
-				}
-
-				hashes = append(hashes, tx.Hash())
-			}
-
-			log.Info("sent delete transactions")
-
-			// now wait for all the transactions to be mined
-			waitUntilMined(client, hashes)
-
-			log.Info("mined transactions")
 		}
+		nonce, err := client.PendingNonceAt(ctx, *g.Config.Address)
+		if err != nil {
+			return err
+		}
+
+		log.Info("pending nonce", "nonce", nonce, "address", g.Config.Address.Hex())
+
+		// first deploy the contract
+		deployCode := common.FromHex(byteCode)
+		deployTx := types.NewContractCreation(nonce, big.NewInt(0), 5995000, g.Config.GasPrice, deployCode)
+		deployTx, err = types.SignTx(deployTx, types.NewEIP155Signer(g.Config.ChainID), g.Config.Key)
+		if err != nil {
+			return err
+		}
+
+		err = client.SendTransaction(ctx, deployTx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				log.Info("received signal, stopping")
+				return nil
+			}
+			return err
+		}
+
+		var contractAddress common.Address
+		receipt, err := waitForReceipt(ctx, client, deployTx.Hash())
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				log.Info("received signal, stopping")
+				return nil
+			}
+			return err
+		}
+		contractAddress = receipt.ContractAddress
+
+		log.Info("deployed filler contract", "address", contractAddress.Hex())
+
+		// now loop 240 times to slowly remove from the contract state and leave 10 items behind to slowly build up the state tree
+		hashes := []common.Hash{}
+		for i := 0; i < 240; i++ {
+			nonce++
+			tx := types.NewTransaction(nonce, contractAddress, big.NewInt(0), 30000, g.Config.GasPrice, common.FromHex(sig))
+			tx, err = types.SignTx(tx, types.NewEIP155Signer(g.Config.ChainID), g.Config.Key)
+			if err != nil {
+				return err
+			}
+
+			err = client.SendTransaction(ctx, tx)
+			if err != nil {
+				return err
+			}
+
+			hashes = append(hashes, tx.Hash())
+		}
+
+		log.Info("sent delete transactions")
+
+		// now wait for all the transactions to be mined
+		err = waitUntilMined(ctx, client, hashes)
+		if err != nil {
+			return err
+		}
+
+		log.Info("mined transactions")
 	}
 }
 
-func (g *StateFiller) Stop() <-chan struct{} {
-	close(g.quit)
+func (g *StateFiller) WaitForStop() <-chan struct{} {
 	return g.done
 }
 
@@ -123,7 +131,7 @@ func (g *StateFiller) Name() string {
 	return "state-filler"
 }
 
-func waitForReceipt(client *ethclient.Client, hash common.Hash) (*types.Receipt, error) {
+func waitForReceipt(ctx context.Context, client *ethclient.Client, hash common.Hash) (*types.Receipt, error) {
 	killswitch := time.NewTimer(1 * time.Minute)
 	defer killswitch.Stop()
 
@@ -131,24 +139,26 @@ func waitForReceipt(client *ethclient.Client, hash common.Hash) (*types.Receipt,
 		select {
 		case <-killswitch.C:
 			return nil, errors.New("timeout waiting for receipt")
+		case <-ctx.Done():
+			return nil, errors.New("context cancelled")
 		default:
-			receipt, err := client.TransactionReceipt(context.Background(), hash)
-			if err != nil {
-				if errors.Is(err, ethereum.NotFound) {
-					time.Sleep(1 * time.Second)
-					continue
-				}
-				return nil, err
-			}
-
-			return receipt, nil
 		}
+
+		receipt, err := client.TransactionReceipt(ctx, hash)
+		if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				continue
+			}
+			return nil, err
+		}
+
+		return receipt, nil
 	}
 }
 
-func waitUntilMined(client *ethclient.Client, hashes []common.Hash) error {
+func waitUntilMined(ctx context.Context, client *ethclient.Client, hashes []common.Hash) error {
 	for _, hash := range hashes {
-		receipt, err := waitForReceipt(client, hash)
+		receipt, err := waitForReceipt(ctx, client, hash)
 		if err != nil {
 			return err
 		}
@@ -159,4 +169,8 @@ func waitUntilMined(client *ethclient.Client, hashes []common.Hash) error {
 	}
 
 	return nil
+}
+
+func (g *StateFiller) Instance() uint64 {
+	return g.instance
 }

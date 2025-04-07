@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"math/big"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 
 type GasPriceReader struct {
 	Config   GasPriceReaderConfig
-	quit     chan struct{}
 	done     chan struct{}
 	instance uint64
 }
@@ -24,17 +24,9 @@ type GasPriceReaderConfig struct {
 
 func NewGasPriceReader(instance uint64) (*GasPriceReader, error) {
 	var config GasPriceReaderConfig
-	// contents, err := os.ReadFile("config/gas-price-reader.json")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if err := json.Unmarshal(contents, &config); err != nil {
-	// 	return nil, err
-	// }
 	return &GasPriceReader{
 		Config:   config,
 		instance: instance,
-		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 	}, nil
 }
@@ -46,7 +38,8 @@ func (a *GasPriceReader) SetWallet(address *common.Address, privateKey *ecdsa.Pr
 	a.Config.GasPrice = gasPrice
 }
 
-func (a *GasPriceReader) Run(client *ethclient.Client, log hclog.Logger) error {
+func (a *GasPriceReader) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
+	defer close(a.done)
 	log = log.With("job", a.Name(), "instance", a.instance)
 
 	ticker := time.NewTicker(logInterval)
@@ -56,37 +49,39 @@ func (a *GasPriceReader) Run(client *ethclient.Client, log hclog.Logger) error {
 
 	for {
 		select {
-		case <-a.quit:
+		case <-ctx.Done():
 			log.Info("received signal, stopping")
-			close(a.done)
 			return nil
 		case <-ticker.C:
 			log.Info("read gas price", "total", totalRead)
 		default:
 		}
 
-		func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			_, err := client.SuggestGasPrice(ctx)
-			if err != nil {
-				log.Error("failed to get gas price", "error", err)
-				time.Sleep(1 * time.Second)
-				return
+		_, err := client.SuggestGasPrice(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				log.Info("received signal, stopping")
+				return nil
 			}
-		}()
 
+			log.Error("failed to get gas price", "error", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
 		totalRead++
 
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
-func (a *GasPriceReader) Stop() <-chan struct{} {
-	close(a.quit)
+func (a *GasPriceReader) Name() string {
+	return "gas-price-reader"
+}
+
+func (a *GasPriceReader) WaitForStop() <-chan struct{} {
 	return a.done
 }
 
-func (a *GasPriceReader) Name() string {
-	return "gas-price-reader"
+func (a *GasPriceReader) Instance() uint64 {
+	return a.instance
 }

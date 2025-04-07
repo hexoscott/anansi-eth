@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -16,7 +17,6 @@ import (
 
 type NonceGapSender struct {
 	Config   NonceGapSenderConfig
-	quit     chan struct{}
 	done     chan struct{}
 	instance uint64
 }
@@ -28,7 +28,6 @@ type NonceGapSenderConfig struct {
 func NewNonceGapSender(instance uint64) (*NonceGapSender, error) {
 	return &NonceGapSender{
 		Config:   NonceGapSenderConfig{},
-		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 		instance: instance,
 	}, nil
@@ -41,7 +40,8 @@ func (n *NonceGapSender) SetWallet(address *common.Address, privateKey *ecdsa.Pr
 	n.Config.GasPrice = gasPrice
 }
 
-func (n *NonceGapSender) Run(client *ethclient.Client, log hclog.Logger) error {
+func (n *NonceGapSender) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
+	defer close(n.done)
 	log = log.With("job", n.Name(), "instance", n.instance)
 
 	totalSent := 0
@@ -49,7 +49,7 @@ func (n *NonceGapSender) Run(client *ethclient.Client, log hclog.Logger) error {
 	ticker := time.NewTicker(logInterval)
 	defer ticker.Stop()
 
-	masterNonce, err := client.PendingNonceAt(context.Background(), *n.Config.Address)
+	masterNonce, err := client.PendingNonceAt(ctx, *n.Config.Address)
 	if err != nil {
 		return err
 	}
@@ -61,57 +61,59 @@ func (n *NonceGapSender) Run(client *ethclient.Client, log hclog.Logger) error {
 
 	for {
 		select {
-		case <-n.quit:
+		case <-ctx.Done():
 			log.Info("received signal, stopping")
-			close(n.done)
 			return nil
+		case <-ticker.C:
+			log.Info("sent transactions", "from", n.Config.Address.Hex(), "total", totalSent)
 		default:
+		}
+
+		nonce := masterNonce
+
+		for i := 0; i < 200; i++ {
 			select {
-			case <-ticker.C:
-				log.Info("sent transactions", "from", n.Config.Address.Hex(), "total", totalSent)
+			case <-ctx.Done():
+				log.Info("received signal, stopping")
+				return nil
 			default:
 			}
 
-			nonce := masterNonce
+			tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, n.Config.GasPrice, nil)
 
-			for i := 0; i < 200; i++ {
-				select {
-				case <-n.quit:
-					log.Info("received signal, stopping")
-					close(n.done)
-					return nil
-				default:
-				}
-
-				tx := types.NewTransaction(nonce, randomAddress, big.NewInt(1000), 21000, n.Config.GasPrice, nil)
-
-				tx, err = types.SignTx(tx, types.NewEIP155Signer(n.Config.ChainID), n.Config.Key)
-				if err != nil {
-					return err
-				}
-
-				err = client.SendTransaction(context.Background(), tx)
-				if err != nil {
-					if err.Error() != "ALREADY_EXISTS: already known" {
-						log.Error("failed to send transaction", "error", err)
-						time.Sleep(1 * time.Second)
-						continue
-					}
-				}
-				nonce++
-				totalSent++
+			tx, err = types.SignTx(tx, types.NewEIP155Signer(n.Config.ChainID), n.Config.Key)
+			if err != nil {
+				return err
 			}
 
-			time.Sleep(50 * time.Millisecond)
+			err = client.SendTransaction(ctx, tx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					log.Error("failed to send transaction", "error", err)
+					return nil
+				}
+				if err.Error() != "ALREADY_EXISTS: already known" {
+					log.Error("failed to send transaction", "error", err)
+					time.Sleep(1 * time.Second)
+					continue
+				}
+			}
+			nonce++
+			totalSent++
 		}
+
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func (n *NonceGapSender) Stop() <-chan struct{} {
-	close(n.quit)
+func (n *NonceGapSender) WaitForStop() <-chan struct{} {
 	return n.done
 }
 
 func (n *NonceGapSender) Name() string {
 	return "nonce-gap-sender"
+}
+
+func (n *NonceGapSender) Instance() uint64 {
+	return n.instance
 }

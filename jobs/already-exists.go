@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -18,7 +19,6 @@ import (
 
 type AlreadyExists struct {
 	Config   AlreadyExistsConfig
-	quit     chan struct{}
 	done     chan struct{}
 	instance uint64
 }
@@ -39,7 +39,6 @@ func NewAlreadyExists(instance uint64) (*AlreadyExists, error) {
 	return &AlreadyExists{
 		Config:   config,
 		instance: instance,
-		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 	}, nil
 }
@@ -51,12 +50,13 @@ func (a *AlreadyExists) SetWallet(address *common.Address, privateKey *ecdsa.Pri
 	a.Config.GasPrice = gasPrice
 }
 
-func (a *AlreadyExists) Run(client *ethclient.Client, log hclog.Logger) error {
+func (a *AlreadyExists) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
+	defer close(a.done)
 	log = log.With("job", a.Name(), "instance", a.instance)
 
 	randomAddress := common.HexToAddress(fmt.Sprintf("0x%x", rand.Intn(1000000000000000000)))
 
-	nonce, err := client.PendingNonceAt(context.Background(), *a.Config.Address)
+	nonce, err := client.PendingNonceAt(ctx, *a.Config.Address)
 	if err != nil {
 		return err
 	}
@@ -75,38 +75,45 @@ func (a *AlreadyExists) Run(client *ethclient.Client, log hclog.Logger) error {
 
 	for {
 		select {
-		case <-a.quit:
+		case <-ctx.Done():
 			log.Info("received signal, stopping")
-			close(a.done)
 			return nil
 		default:
-			err := client.SendTransaction(context.Background(), tx)
-			if err != nil {
-				if err.Error() != "ALREADY_EXISTS: already known" {
-					log.Error("failed to send transaction", "error", err)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-			}
-
-			totalSent++
-
-			select {
-			case <-ticker.C:
-				log.Info("sent transactions", "total", totalSent)
-			default:
-			}
-
-			time.Sleep(50 * time.Millisecond)
 		}
-	}
-}
 
-func (a *AlreadyExists) Stop() <-chan struct{} {
-	close(a.quit)
-	return a.done
+		err := client.SendTransaction(ctx, tx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				log.Info("received signal, stopping")
+				return nil
+			}
+			if err.Error() != "ALREADY_EXISTS: already known" {
+				log.Error("failed to send transaction", "error", err)
+				time.Sleep(3 * time.Second)
+				continue
+			}
+		}
+
+		totalSent++
+
+		select {
+		case <-ticker.C:
+			log.Info("sent transactions", "total", totalSent)
+		default:
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func (a *AlreadyExists) Name() string {
 	return "already-exists"
+}
+
+func (a *AlreadyExists) WaitForStop() <-chan struct{} {
+	return a.done
+}
+
+func (a *AlreadyExists) Instance() uint64 {
+	return a.instance
 }

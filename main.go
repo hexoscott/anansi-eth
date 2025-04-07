@@ -77,20 +77,22 @@ func main() {
 	}
 	defer client.Close()
 
-	parentNonce, err := client.PendingNonceAt(context.Background(), parentAddress)
+	ctx, cancelJobs := context.WithCancel(context.Background())
+
+	parentNonce, err := client.PendingNonceAt(ctx, parentAddress)
 	if err != nil {
 		log.Error("failed to get parent nonce", "error", err)
 		return
 	}
 
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Error("failed to suggest gas price", "error", err)
 		return
 	}
 	log.Info("suggested gas price", "price", gasPrice)
 
-	allJobs, err := createJobs()
+	allJobs, err := createJobs(parentKey, &parentAddress)
 	if err != nil {
 		log.Error("failed to create jobs", "error", err)
 		return
@@ -98,7 +100,7 @@ func main() {
 
 	var chainID *big.Int
 	if chainArg == 0 {
-		chainID, err = client.NetworkID(context.Background())
+		chainID, err = client.NetworkID(ctx)
 		if err != nil {
 			log.Error("failed to get chain id", "error", err)
 			return
@@ -107,14 +109,14 @@ func main() {
 		chainID = big.NewInt(int64(chainArg))
 	}
 
-	fundingHashes, walletKeys, err := fundWallets(client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, gasPrice, log)
+	fundingHashes, walletKeys, err := fundWallets(ctx, client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, gasPrice, log)
 	if err != nil {
 		log.Error("failed to fund wallets", "error", err)
 		return
 	}
 
 	if !gasless {
-		allMined, err := waitUntilMined(client, fundingHashes)
+		allMined, err := waitUntilMined(ctx, client, fundingHashes)
 		if err != nil {
 			log.Error("failed to wait for funding transactions to be mined", "error", err)
 			return
@@ -133,7 +135,7 @@ func main() {
 		job.SetWallet(wallet.Address, wallet.PrivateKey, chainID, gasPrice)
 		go func(j jobs.Job, wallet Wallet) {
 			log.Info("starting job", "name", j.Name(), "address", wallet.Address.Hex())
-			err = j.Run(client, log)
+			err = j.Run(ctx, client, log)
 			if err != nil {
 				log.Error("problem running job", "name", j.Name(), "error", err)
 			}
@@ -142,29 +144,28 @@ func main() {
 
 	// now wait for sigint or sigterm
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1)
+	sig := <-ch
+	log.Info("received signal", "signal", sig.String())
 
-	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	cancelJobs()
+
+	timeout, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	doneChans := make([]<-chan struct{}, len(allJobs))
-	for i, job := range allJobs {
-		doneChans[i] = job.Stop()
-	}
-
-	for i, doneChan := range doneChans {
+	for _, job := range allJobs {
+		log.Info("waiting for job to finish", "name", job.Name(), "instance", job.Instance())
 		select {
 		case <-timeout.Done():
 			log.Error("timed out waiting for jobs to finish")
 			return
-		case <-doneChan:
-			log.Info("job finished", "name", allJobs[i].Name())
+		case <-job.WaitForStop():
+			log.Info("job finished", "name", job.Name())
 		}
 	}
 }
 
-func createJobs() ([]jobs.Job, error) {
+func createJobs(parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]jobs.Job, error) {
 	result := []jobs.Job{}
 
 	for i := 0; i < 5; i++ {
@@ -192,6 +193,14 @@ func createJobs() ([]jobs.Job, error) {
 	}
 
 	for i := 0; i < 5; i++ {
+		nonceOverlapSender, err := jobs.NewNonceOverlapSender(uint64(i), parentKey, parentAddress)
+		if err != nil {
+			return result, err
+		}
+		result = append(result, nonceOverlapSender)
+	}
+
+	for i := 0; i < 5; i++ {
 		nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
 		if err != nil {
 			return result, err
@@ -199,7 +208,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, nonceGapSender)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10; i++ {
 		multiSender, err := jobs.NewMultiSender(uint64(i))
 		if err != nil {
 			return result, err
@@ -207,7 +216,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, multiSender)
 	}
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 5; i++ {
 		stateFiller, err := jobs.NewStateFiller(uint64(i))
 		if err != nil {
 			return result, err
@@ -215,7 +224,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, stateFiller)
 	}
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 5; i++ {
 		txReplacerWithGaps, err := jobs.NewTxReplacerWithGaps(uint64(i))
 		if err != nil {
 			return result, err
@@ -223,7 +232,7 @@ func createJobs() ([]jobs.Job, error) {
 		result = append(result, txReplacerWithGaps)
 	}
 
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 5; i++ {
 		gasPriceReader, err := jobs.NewGasPriceReader(uint64(i))
 		if err != nil {
 			return result, err
@@ -253,6 +262,7 @@ func createWallet() (*common.Address, *ecdsa.PrivateKey, error) {
 }
 
 func fundWallet(
+	ctx context.Context,
 	client *ethclient.Client,
 	nonce uint64,
 	parentAddress *common.Address,
@@ -269,7 +279,7 @@ func fundWallet(
 		return common.Hash{}, err
 	}
 
-	err = client.SendTransaction(context.Background(), tx)
+	err = client.SendTransaction(ctx, tx)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -278,6 +288,7 @@ func fundWallet(
 }
 
 func fundWallets(
+	ctx context.Context,
 	client *ethclient.Client,
 	nonce uint64,
 	parentAddress *common.Address,
@@ -302,7 +313,7 @@ func fundWallets(
 		log.Info("created wallet", "address", address.Hex())
 
 		if !gasless {
-			hash, err := fundWallet(client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
+			hash, err := fundWallet(ctx, client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -315,12 +326,12 @@ func fundWallets(
 	return hashes, wallets, nil
 }
 
-func waitUntilMined(client *ethclient.Client, hashes []common.Hash) (bool, error) {
+func waitUntilMined(ctx context.Context, client *ethclient.Client, hashes []common.Hash) (bool, error) {
 	allMined := false
 	killSwitch := 0
 	for _, hash := range hashes {
 		for {
-			receipt, err := client.TransactionReceipt(context.Background(), hash)
+			receipt, err := client.TransactionReceipt(ctx, hash)
 			if err != nil {
 				if errors.Is(err, ethereum.NotFound) {
 					time.Sleep(1 * time.Second)
