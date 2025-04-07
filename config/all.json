@@ -1,0 +1,44 @@
+{
+    "jobs": [
+        {
+            "type": "AlreadyExists",
+            "count": 2
+        },
+        {
+            "type": "GasPriceReader",
+            "count": 2
+        },
+        {
+            "type": "GoodSender",
+            "count": 2
+        },
+        {
+            "type": "MultiSender",
+            "count": 2
+        },
+        {
+            "type": "NoWaitSender",
+            "count": 2
+        },
+        {
+            "type": "NonceGapSender",
+            "count": 2
+        },
+        {
+            "type": "NonceOverlapSender",
+            "count": 2
+        },
+        {
+            "type": "NonceTooHighSender",
+            "count": 2
+        },
+        {
+            "type": "StateFiller",
+            "count": 2
+        },
+        {
+            "type": "TxReplacerWithGaps",
+            "count": 2
+        }
+    ]
+}

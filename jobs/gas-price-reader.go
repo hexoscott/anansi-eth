@@ -85,3 +85,12 @@ func (a *GasPriceReader) WaitForStop() <-chan struct{} {
 func (a *GasPriceReader) Instance() uint64 {
 	return a.instance
 }
+
+func (a *GasPriceReader) NeedsFunding() bool {
+	return false
+}
+
+func (a *GasPriceReader) WalletAddress() *common.Address {
+	address := common.HexToAddress("0x0000000000000000000000000000000000000000")
+	return &address
+}

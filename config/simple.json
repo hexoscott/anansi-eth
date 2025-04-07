@@ -1,0 +1,9 @@
+
+{
+    "jobs": [
+        {
+            "type": "GoodSender",
+            "count": 3
+        }
+    ]
+}

@@ -138,3 +138,11 @@ func (g *GoodSender) Name() string {
 func (g *GoodSender) Instance() uint64 {
 	return g.instance
 }
+
+func (g *GoodSender) NeedsFunding() bool {
+	return true
+}
+
+func (g *GoodSender) WalletAddress() *common.Address {
+	return g.Config.Address
+}

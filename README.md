@@ -11,3 +11,4 @@ You can build the app with `go build` and then run it with `./anansi-eth`.
 You will need to specify two flags:
 - `-rpc-url`: The URL of the RPC to use
 - `-private-key`: The private key of the account to use for funding
+- `-job-file`: The file determining the jobs to load, defaults to ./config/all.json which loads 2 of each job type.

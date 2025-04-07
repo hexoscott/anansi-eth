@@ -143,3 +143,11 @@ func (m *MultiSender) Name() string {
 func (m *MultiSender) Instance() uint64 {
 	return m.instance
 }
+
+func (m *MultiSender) NeedsFunding() bool {
+	return true
+}
+
+func (m *MultiSender) WalletAddress() *common.Address {
+	return m.Config.Address
+}

@@ -74,6 +74,10 @@ func (j *Monitor) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKe
 	// no op
 }
 
+func (j *Monitor) NeedsFunding() bool {
+	return false
+}
+
 type PoolStatus struct {
 	BaseFee string `json:"baseFee"`
 	Pending string `json:"pending"`
@@ -98,4 +102,9 @@ func decodePoolStatus(status PoolStatus) (uint64, uint64, uint64, error) {
 
 func (j *Monitor) Instance() uint64 {
 	return 0
+}
+
+func (j *Monitor) WalletAddress() *common.Address {
+	address := common.HexToAddress("0x0000000000000000000000000000000000000000")
+	return &address
 }

@@ -113,3 +113,11 @@ func (n *NoWaitSender) Name() string {
 func (n *NoWaitSender) Instance() uint64 {
 	return n.instance
 }
+
+func (n *NoWaitSender) NeedsFunding() bool {
+	return true
+}
+
+func (n *NoWaitSender) WalletAddress() *common.Address {
+	return n.Config.Address
+}

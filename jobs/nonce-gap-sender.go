@@ -117,3 +117,11 @@ func (n *NonceGapSender) Name() string {
 func (n *NonceGapSender) Instance() uint64 {
 	return n.instance
 }
+
+func (n *NonceGapSender) NeedsFunding() bool {
+	return true
+}
+
+func (n *NonceGapSender) WalletAddress() *common.Address {
+	return n.Config.Address
+}

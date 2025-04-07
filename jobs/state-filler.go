@@ -174,3 +174,11 @@ func waitUntilMined(ctx context.Context, client *ethclient.Client, hashes []comm
 func (g *StateFiller) Instance() uint64 {
 	return g.instance
 }
+
+func (g *StateFiller) NeedsFunding() bool {
+	return true
+}
+
+func (g *StateFiller) WalletAddress() *common.Address {
+	return g.Config.Address
+}

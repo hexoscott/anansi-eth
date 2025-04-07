@@ -117,3 +117,11 @@ func (a *AlreadyExists) WaitForStop() <-chan struct{} {
 func (a *AlreadyExists) Instance() uint64 {
 	return a.instance
 }
+
+func (a *AlreadyExists) NeedsFunding() bool {
+	return true
+}
+
+func (a *AlreadyExists) WalletAddress() *common.Address {
+	return a.Config.Address
+}

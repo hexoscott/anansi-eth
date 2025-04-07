@@ -152,3 +152,11 @@ func (n *TxReplacerWithGaps) Name() string {
 func (n *TxReplacerWithGaps) Instance() uint64 {
 	return n.instance
 }
+
+func (n *TxReplacerWithGaps) NeedsFunding() bool {
+	return true
+}
+
+func (n *TxReplacerWithGaps) WalletAddress() *common.Address {
+	return n.Config.Address
+}

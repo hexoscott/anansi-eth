@@ -115,3 +115,11 @@ func (n *NonceTooHighSender) Name() string {
 func (n *NonceTooHighSender) Instance() uint64 {
 	return n.instance
 }
+
+func (n *NonceTooHighSender) NeedsFunding() bool {
+	return true
+}
+
+func (n *NonceTooHighSender) WalletAddress() *common.Address {
+	return n.Config.Address
+}

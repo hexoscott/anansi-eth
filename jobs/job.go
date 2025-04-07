@@ -19,6 +19,8 @@ type Job interface {
 	Instance() uint64
 	SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int)
 	WaitForStop() <-chan struct{}
+	NeedsFunding() bool
+	WalletAddress() *common.Address
 }
 
 type JobConfig struct {
@@ -26,4 +28,13 @@ type JobConfig struct {
 	Key      *ecdsa.PrivateKey
 	ChainID  *big.Int
 	GasPrice *big.Int
+}
+
+type JobFile struct {
+	Jobs []JobJsonDefinition `json:"jobs"`
+}
+
+type JobJsonDefinition struct {
+	Count int    `json:"count"`
+	Type  string `json:"type"`
 }

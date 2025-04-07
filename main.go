@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/json"
 	"errors"
 	"flag"
 	"math/big"
@@ -25,6 +26,7 @@ import (
 var (
 	privateKey string
 	rpcURL     string
+	jobFile    string
 	gasless    bool
 	chainArg   uint64
 
@@ -44,6 +46,7 @@ func main() {
 	flag.StringVar(&privateKey, "private-key", "", "main account private key used to fund accounts for the jobs")
 	flag.StringVar(&rpcURL, "rpc-url", "", "rpc url")
 	flag.BoolVar(&gasless, "gasless", false, "use gasless transactions")
+	flag.StringVar(&jobFile, "job-file", "./config/all.json", "the json file used to define the jobs to run")
 	flag.Uint64Var(&chainArg, "chain-id", 0, "chain id")
 	flag.Parse()
 
@@ -58,6 +61,11 @@ func main() {
 
 	if rpcURL == "" {
 		log.Error("rpc-url is required")
+		return
+	}
+
+	if jobFile == "" {
+		log.Error("job-file flag is missing")
 		return
 	}
 
@@ -92,7 +100,7 @@ func main() {
 	}
 	log.Info("suggested gas price", "price", gasPrice)
 
-	allJobs, err := createJobs(parentKey, &parentAddress)
+	allJobs, err := createJobs(jobFile, parentKey, &parentAddress)
 	if err != nil {
 		log.Error("failed to create jobs", "error", err)
 		return
@@ -109,7 +117,14 @@ func main() {
 		chainID = big.NewInt(int64(chainArg))
 	}
 
-	fundingHashes, walletKeys, err := fundWallets(ctx, client, parentNonce, &parentAddress, parentKey, len(allJobs), fundAmount, chainID, gasPrice, log)
+	fundingNeeded := 0
+	for _, job := range allJobs {
+		if job.NeedsFunding() {
+			fundingNeeded++
+		}
+	}
+
+	fundingHashes, walletKeys, err := fundWallets(ctx, client, parentNonce, &parentAddress, parentKey, fundingNeeded, fundAmount, chainID, gasPrice, log)
 	if err != nil {
 		log.Error("failed to fund wallets", "error", err)
 		return
@@ -130,16 +145,21 @@ func main() {
 		}
 	}
 
-	for i, job := range allJobs {
-		wallet := walletKeys[i]
-		job.SetWallet(wallet.Address, wallet.PrivateKey, chainID, gasPrice)
-		go func(j jobs.Job, wallet Wallet) {
-			log.Info("starting job", "name", j.Name(), "address", wallet.Address.Hex())
+	// monitor does not need funding
+
+	for _, job := range allJobs {
+		if job.NeedsFunding() {
+			wallet := walletKeys[0]
+			walletKeys = walletKeys[1:]
+			job.SetWallet(wallet.Address, wallet.PrivateKey, chainID, gasPrice)
+		}
+		go func(j jobs.Job) {
+			log.Info("starting job", "name", j.Name(), "address", j.WalletAddress().Hex())
 			err = j.Run(ctx, client, log)
 			if err != nil {
 				log.Error("problem running job", "name", j.Name(), "error", err)
 			}
-		}(job, wallet)
+		}(job)
 	}
 
 	// now wait for sigint or sigterm
@@ -165,79 +185,107 @@ func main() {
 	}
 }
 
-func createJobs(parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]jobs.Job, error) {
+func createJobs(jobFileLocation string, parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]jobs.Job, error) {
+	jobFile, err := parseJobFile(jobFileLocation)
+	if err != nil {
+		return nil, err
+	}
+
 	result := []jobs.Job{}
+	var instance uint64 = 0
 
-	for i := 0; i < 5; i++ {
-		alreadyExists, err := jobs.NewAlreadyExists(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, alreadyExists)
-	}
+	for _, job := range jobFile.Jobs {
+		switch job.Type {
+		case "GoodSender":
+			for i := 0; i < job.Count; i++ {
+				goodSender, err := jobs.NewGoodSender(instance)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, goodSender)
+				instance++
+			}
 
-	for i := 0; i < 20; i++ {
-		goodSender, err := jobs.NewGoodSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, goodSender)
-	}
+		case "AlreadyExists":
+			for i := 0; i < job.Count; i++ {
+				alreadyExists, err := jobs.NewAlreadyExists(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, alreadyExists)
+				instance++
+			}
 
-	for i := 0; i < 20; i++ {
-		noWaitSender, err := jobs.NewNoWaitSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, noWaitSender)
-	}
+		case "NoWaitSender":
+			for i := 0; i < job.Count; i++ {
+				noWaitSender, err := jobs.NewNoWaitSender(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, noWaitSender)
+				instance++
+			}
 
-	for i := 0; i < 5; i++ {
-		nonceOverlapSender, err := jobs.NewNonceOverlapSender(uint64(i), parentKey, parentAddress)
-		if err != nil {
-			return result, err
-		}
-		result = append(result, nonceOverlapSender)
-	}
+		case "NonceOverlapSender":
+			for i := 0; i < job.Count; i++ {
+				nonceOverlapSender, err := jobs.NewNonceOverlapSender(instance, parentKey, parentAddress)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, nonceOverlapSender)
+				instance++
+			}
 
-	for i := 0; i < 5; i++ {
-		nonceGapSender, err := jobs.NewNonceGapSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, nonceGapSender)
-	}
+		case "NonceGapSender":
+			for i := 0; i < job.Count; i++ {
+				nonceGapSender, err := jobs.NewNonceGapSender(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, nonceGapSender)
+				instance++
+			}
 
-	for i := 0; i < 10; i++ {
-		multiSender, err := jobs.NewMultiSender(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, multiSender)
-	}
+		case "MultiSender":
+			for i := 0; i < job.Count; i++ {
+				multiSender, err := jobs.NewMultiSender(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, multiSender)
+				instance++
+			}
 
-	for i := 0; i < 5; i++ {
-		stateFiller, err := jobs.NewStateFiller(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, stateFiller)
-	}
+		case "StateFiller":
+			for i := 0; i < job.Count; i++ {
+				stateFiller, err := jobs.NewStateFiller(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, stateFiller)
+				instance++
+			}
 
-	for i := 0; i < 5; i++ {
-		txReplacerWithGaps, err := jobs.NewTxReplacerWithGaps(uint64(i))
-		if err != nil {
-			return result, err
-		}
-		result = append(result, txReplacerWithGaps)
-	}
+		case "TxReplacerWithGaps":
+			for i := 0; i < job.Count; i++ {
+				txReplacerWithGaps, err := jobs.NewTxReplacerWithGaps(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, txReplacerWithGaps)
+				instance++
+			}
 
-	for i := 0; i < 5; i++ {
-		gasPriceReader, err := jobs.NewGasPriceReader(uint64(i))
-		if err != nil {
-			return result, err
+		case "GasPriceReader":
+			for i := 0; i < job.Count; i++ {
+				gasPriceReader, err := jobs.NewGasPriceReader(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, gasPriceReader)
+				instance++
+			}
 		}
-		result = append(result, gasPriceReader)
 	}
 
 	monitor, err := jobs.NewMonitor()
@@ -246,6 +294,19 @@ func createJobs(parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]j
 	}
 	result = append(result, monitor)
 
+	return result, nil
+}
+
+func parseJobFile(file string) (*jobs.JobFile, error) {
+	contents, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	result := &jobs.JobFile{}
+	err = json.Unmarshal(contents, &result)
+	if err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

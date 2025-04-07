@@ -127,3 +127,11 @@ func (n *NonceOverlapSender) Name() string {
 func (n *NonceOverlapSender) Instance() uint64 {
 	return n.instance
 }
+
+func (n *NonceOverlapSender) NeedsFunding() bool {
+	return true
+}
+
+func (n *NonceOverlapSender) WalletAddress() *common.Address {
+	return n.Config.Address
+}
