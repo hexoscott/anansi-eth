@@ -1,0 +1,25 @@
+# Refer to golangci-lint's example config file for more options and information:
+# https://github.com/golangci/golangci-lint/blob/master/.golangci.example.yml
+
+# Required for golangci-lint v2.0.0+
+version: 2
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - revive
+    - govet
+    - staticcheck
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
