@@ -1,0 +1,24 @@
+{
+    "jobs": [
+        {
+            "type": "AlreadyExists",
+            "count": 2
+        },
+        {
+            "type": "GoodSender",
+            "count": 5
+        },
+        {
+            "type": "MultiSender",
+            "count": 5
+        },
+        {
+            "type": "NoWaitSender",
+            "count": 50
+        },
+        {
+            "type": "NonceGapSender",
+            "count": 15
+        }
+    ]
+}

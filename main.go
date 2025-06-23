@@ -285,6 +285,16 @@ func createJobs(jobFileLocation string, parentKey *ecdsa.PrivateKey, parentAddre
 				result = append(result, gasPriceReader)
 				instance++
 			}
+
+		case "RepeatReceiptsJob":
+			for i := 0; i < job.Count; i++ {
+				repeatReceiptsJob, err := jobs.NewRepeatReceiptsJob(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, repeatReceiptsJob)
+				instance++
+			}
 		}
 	}
 
@@ -397,7 +407,7 @@ func waitUntilMined(ctx context.Context, client *ethclient.Client, hashes []comm
 				if errors.Is(err, ethereum.NotFound) {
 					time.Sleep(1 * time.Second)
 					killSwitch++
-					if killSwitch > 10 {
+					if killSwitch > 50 {
 						return false, errors.New("failed to mine all funding transactions")
 					}
 					continue

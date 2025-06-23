@@ -2,47 +2,43 @@
     "jobs": [
         {
             "type": "AlreadyExists",
-            "count": 2
+            "count": 0
         },
         {
             "type": "GasPriceReader",
-            "count": 2
+            "count": 0
         },
         {
             "type": "GoodSender",
-            "count": 2
+            "count": 100
         },
         {
             "type": "MultiSender",
-            "count": 2
+            "count": 0
         },
         {
             "type": "NoWaitSender",
-            "count": 2
+            "count": 100
         },
         {
             "type": "NonceGapSender",
-            "count": 2
+            "count": 10
         },
         {
             "type": "NonceOverlapSender",
-            "count": 2
+            "count": 0
         },
         {
             "type": "NonceTooHighSender",
-            "count": 2
+            "count": 0
         },
         {
             "type": "StateFiller",
-            "count": 2
+            "count": 0
         },
         {
             "type": "TxReplacerWithGaps",
-            "count": 2
-        },
-        {
-            "type": "RepeatReceiptsJob",
-            "count": 2
+            "count": 0
         }
     ]
 }

@@ -1,0 +1,8 @@
+{
+    "jobs": [
+        {
+            "type": "RepeatReceiptsJob",
+            "count": 80
+        }
+    ]
+}
