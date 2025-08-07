@@ -153,3 +153,10 @@ func (n *TxReplacerWithGaps) NeedsFunding() bool {
 func (n *TxReplacerWithGaps) WalletAddress() *common.Address {
 	return n.Config.Address
 }
+
+func (n *TxReplacerWithGaps) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (n *TxReplacerWithGaps) UpdateLoad(indicator LoadIndicator) {
+}

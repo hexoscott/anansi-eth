@@ -120,3 +120,10 @@ func (n *NonceGapSender) NeedsFunding() bool {
 func (n *NonceGapSender) WalletAddress() *common.Address {
 	return n.Config.Address
 }
+
+func (n *NonceGapSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (n *NonceGapSender) UpdateLoad(indicator LoadIndicator) {
+}

@@ -21,6 +21,8 @@ type Job interface {
 	WaitForStop() <-chan struct{}
 	NeedsFunding() bool
 	WalletAddress() *common.Address
+	GiveLoadStats() map[string]uint64
+	UpdateLoad(indicator LoadIndicator)
 }
 
 type JobConfig struct {
@@ -38,3 +40,11 @@ type JobJsonDefinition struct {
 	Count int    `json:"count"`
 	Type  string `json:"type"`
 }
+
+type LoadIndicator uint64
+
+var (
+	LoadIncrease LoadIndicator = 1
+	LoadDecrease LoadIndicator = 2
+	LoadSteady   LoadIndicator = 3
+)

@@ -107,8 +107,7 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 			tx, _, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, mintData, g.Config.ChainID, g.Config.Key, false)
 			if err != nil {
 				log.Error("failed to make contract call", "error", err)
-				time.Sleep(1 * time.Second)
-				continue
+				return err
 			}
 			transactions = append(transactions, tx)
 		}
@@ -165,4 +164,28 @@ func (g *ERC20Job) NeedsFunding() bool {
 
 func (g *ERC20Job) WalletAddress() *common.Address {
 	return g.Config.Address
+}
+
+func (g *ERC20Job) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{
+		"mints":     g.mints.Load(),
+		"transfers": g.transfers.Load(),
+	}
+}
+
+func (g *ERC20Job) UpdateLoad(indicator LoadIndicator) {
+	switch indicator {
+	case LoadIncrease:
+		g.mints.Add(1)
+		g.transfers.Add(1)
+	case LoadDecrease:
+		currentMints := g.mints.Load()
+		if currentMints > 1 {
+			g.mints.Store(currentMints - 1)
+		}
+		currentTransfers := g.transfers.Load()
+		if currentTransfers > 1 {
+			g.transfers.Store(currentTransfers - 1)
+		}
+	}
 }

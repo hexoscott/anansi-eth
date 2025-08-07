@@ -137,3 +137,10 @@ func (g *GoodSender) NeedsFunding() bool {
 func (g *GoodSender) WalletAddress() *common.Address {
 	return g.Config.Address
 }
+
+func (g *GoodSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (g *GoodSender) UpdateLoad(indicator LoadIndicator) {
+}

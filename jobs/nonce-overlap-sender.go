@@ -130,3 +130,10 @@ func (n *NonceOverlapSender) NeedsFunding() bool {
 func (n *NonceOverlapSender) WalletAddress() *common.Address {
 	return n.Config.Address
 }
+
+func (n *NonceOverlapSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (n *NonceOverlapSender) UpdateLoad(indicator LoadIndicator) {
+}

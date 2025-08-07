@@ -118,3 +118,10 @@ func (n *NonceTooHighSender) NeedsFunding() bool {
 func (n *NonceTooHighSender) WalletAddress() *common.Address {
 	return n.Config.Address
 }
+
+func (n *NonceTooHighSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (n *NonceTooHighSender) UpdateLoad(indicator LoadIndicator) {
+}

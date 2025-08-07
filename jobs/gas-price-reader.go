@@ -92,3 +92,10 @@ func (a *GasPriceReader) WalletAddress() *common.Address {
 	address := common.HexToAddress("0x0000000000000000000000000000000000000000")
 	return &address
 }
+
+func (g *GasPriceReader) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (g *GasPriceReader) UpdateLoad(indicator LoadIndicator) {
+}

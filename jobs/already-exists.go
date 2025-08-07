@@ -119,3 +119,10 @@ func (a *AlreadyExists) NeedsFunding() bool {
 func (a *AlreadyExists) WalletAddress() *common.Address {
 	return a.Config.Address
 }
+
+func (a *AlreadyExists) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (g *AlreadyExists) UpdateLoad(indicator LoadIndicator) {
+}

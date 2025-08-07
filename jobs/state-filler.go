@@ -174,3 +174,10 @@ func (g *StateFiller) NeedsFunding() bool {
 func (g *StateFiller) WalletAddress() *common.Address {
 	return g.Config.Address
 }
+
+func (g *StateFiller) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (g *StateFiller) UpdateLoad(indicator LoadIndicator) {
+}

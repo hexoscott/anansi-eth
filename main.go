@@ -106,6 +106,13 @@ func main() {
 		return
 	}
 
+	monitor, err := jobs.NewMonitor(allJobs)
+	if err != nil {
+		log.Error("error creating monitor job")
+		return
+	}
+	allJobs = append(allJobs, monitor)
+
 	var chainID *big.Int
 	if chainArg == 0 {
 		chainID, err = client.NetworkID(ctx)
@@ -129,6 +136,7 @@ func main() {
 		log.Error("failed to fund wallets", "error", err)
 		return
 	}
+	log.Info("funded wallets", "count", len(walletKeys))
 
 	if !gasless {
 		allMined, err := waitUntilMined(ctx, client, fundingHashes)
@@ -308,12 +316,6 @@ func createJobs(jobFileLocation string, parentKey *ecdsa.PrivateKey, parentAddre
 		}
 	}
 
-	monitor, err := jobs.NewMonitor()
-	if err != nil {
-		return result, err
-	}
-	result = append(result, monitor)
-
 	return result, nil
 }
 
@@ -391,14 +393,12 @@ func fundWallets(
 			Address:    address,
 			PrivateKey: privateKey,
 		}
-		log.Info("created wallet", "address", address.Hex())
 
 		if !gasless {
 			hash, err := fundWallet(ctx, client, nonce, parentAddress, parentKey, address, amount, chainID, gasPrice)
 			if err != nil {
 				return nil, nil, err
 			}
-			log.Info("funded wallet", "address", address.Hex(), "hash", hash.Hex())
 			hashes[i] = hash
 			nonce++
 		}

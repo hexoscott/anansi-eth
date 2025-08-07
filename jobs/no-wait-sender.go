@@ -116,3 +116,10 @@ func (n *NoWaitSender) NeedsFunding() bool {
 func (n *NoWaitSender) WalletAddress() *common.Address {
 	return n.Config.Address
 }
+
+func (n *NoWaitSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (n *NoWaitSender) UpdateLoad(indicator LoadIndicator) {
+}

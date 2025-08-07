@@ -145,3 +145,10 @@ func (g *RepeatReceiptsJob) NeedsFunding() bool {
 func (g *RepeatReceiptsJob) WalletAddress() *common.Address {
 	return g.Config.Address
 }
+
+func (g *RepeatReceiptsJob) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (g *RepeatReceiptsJob) UpdateLoad(indicator LoadIndicator) {
+}

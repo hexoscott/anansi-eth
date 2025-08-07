@@ -146,3 +146,10 @@ func (m *MultiSender) NeedsFunding() bool {
 func (m *MultiSender) WalletAddress() *common.Address {
 	return m.Config.Address
 }
+
+func (m *MultiSender) GiveLoadStats() map[string]uint64 {
+	return map[string]uint64{}
+}
+
+func (m *MultiSender) UpdateLoad(indicator LoadIndicator) {
+}

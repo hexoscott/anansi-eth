@@ -17,11 +17,13 @@ import (
 type Monitor struct {
 	Job
 	done chan struct{}
+	jobs []Job
 }
 
-func NewMonitor() (*Monitor, error) {
+func NewMonitor(jobs []Job) (*Monitor, error) {
 	return &Monitor{
 		done: make(chan struct{}),
+		jobs: jobs,
 	}, nil
 }
 
@@ -61,7 +63,37 @@ func (j *Monitor) Run(ctx context.Context, client *ethclient.Client, log hclog.L
 			time.Sleep(3 * time.Second)
 			continue
 		}
+
 		log.Info("txpool_status", "baseFee", baseFee, "pending", pending, "queued", queued)
+
+		stats := make(map[string]map[string]uint64)
+		for _, job := range j.jobs {
+			name := job.Name()
+			s := job.GiveLoadStats()
+			found, ok := stats[name]
+			if !ok {
+				found = make(map[string]uint64)
+				stats[name] = found
+			}
+			for k, v := range s {
+				found[k] = found[k] + v
+			}
+		}
+
+		if pending <= 100 {
+			log.Info("updating load - increasing")
+			for _, job := range j.jobs {
+				job.UpdateLoad(LoadIncrease)
+			}
+		} else if pending > 0 {
+			log.Info("updating load - decreasing")
+			for _, job := range j.jobs {
+				job.UpdateLoad(LoadDecrease)
+			}
+		}
+
+		log.Info("load stats report", "report", stats)
+
 		time.Sleep(3 * time.Second)
 	}
 }

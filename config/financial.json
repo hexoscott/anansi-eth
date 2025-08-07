@@ -2,7 +2,7 @@
         "jobs": [
             {
                 "type": "ERC20Job",
-                "count": 1
+                "count": 2
             }
         ]
     }
