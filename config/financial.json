@@ -1,0 +1,9 @@
+{
+        "jobs": [
+            {
+                "type": "ERC20Job",
+                "count": 1
+            }
+        ]
+    }
+    

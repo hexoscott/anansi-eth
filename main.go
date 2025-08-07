@@ -295,6 +295,16 @@ func createJobs(jobFileLocation string, parentKey *ecdsa.PrivateKey, parentAddre
 				result = append(result, repeatReceiptsJob)
 				instance++
 			}
+
+		case "ERC20Job":
+			for i := 0; i < job.Count; i++ {
+				erc20Job, err := jobs.NewERC20Job(instance)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, erc20Job)
+				instance++
+			}
 		}
 	}
 
