@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+	"math/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -86,4 +87,89 @@ func deployContractWithEstimates(
 	}
 
 	return tx, receipt, nil
+}
+
+func makeContractCall(
+	ctx context.Context,
+	client *ethclient.Client,
+	log hclog.Logger,
+	from common.Address,
+	to common.Address,
+	data []byte,
+	chainId *big.Int,
+	key *ecdsa.PrivateKey,
+	waitOnReceipt bool,
+) (*types.Transaction, *types.Receipt, error) {
+
+	nonce, err := client.PendingNonceAt(ctx, from)
+	if err != nil {
+		log.Error("failed to get nonce", "error", err)
+		return nil, nil, err
+	}
+
+	gasEstimate, err := client.EstimateGas(ctx, ethereum.CallMsg{
+		From: from,
+		To:   &to,
+		Data: data,
+	})
+	if err != nil {
+		log.Error("failed to estimate gas", "error", err)
+		return nil, nil, err
+	}
+
+	suggestedPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		log.Error("failed to suggest gas price", "error", err)
+		return nil, nil, err
+	}
+
+	// now make the mint call
+	tx := types.NewTx(&types.LegacyTx{
+		Nonce:    nonce,
+		To:       &to,
+		Value:    big.NewInt(0),
+		Gas:      gasEstimate,
+		GasPrice: suggestedPrice,
+		Data:     data,
+	})
+
+	tx, err = types.SignTx(tx, types.NewEIP155Signer(chainId), key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = client.SendTransaction(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var receipt *types.Receipt
+	if waitOnReceipt {
+		for i := 0; i < 10; i++ {
+			receipt, err = client.TransactionReceipt(ctx, tx.Hash())
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					time.Sleep(1 * time.Second)
+					continue
+				}
+
+				return nil, nil, err
+			}
+
+			if receipt.Status == types.ReceiptStatusSuccessful {
+				break
+			}
+		}
+	}
+
+	return tx, receipt, nil
+}
+
+func randomAddress() common.Address {
+	randomBytes := make([]byte, 20)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return common.Address{}
+	}
+	return common.BytesToAddress(randomBytes)
 }
