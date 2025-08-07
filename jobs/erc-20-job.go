@@ -30,13 +30,15 @@ type ERC20JobConfig struct {
 }
 
 func NewERC20Job(instance uint64) (*ERC20Job, error) {
-	return &ERC20Job{
-		Config:    ERC20JobConfig{},
-		done:      make(chan struct{}),
-		instance:  instance,
-		mints:     1,
-		transfers: 5,
-	}, nil
+	job := &ERC20Job{
+		Config:   ERC20JobConfig{},
+		done:     make(chan struct{}),
+		instance: instance,
+	}
+	job.mints.Store(1)
+	job.transfers.Store(5)
+
+	return job, nil
 }
 
 func (g *ERC20Job) SetWallet(address *common.Address, privateKey *ecdsa.PrivateKey, chainID *big.Int, gasPrice *big.Int) {
@@ -101,7 +103,7 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 		}
 
 		transactions := make([]*types.Transaction, 0)
-		for i := 0; i < int(g.mints); i++ {
+		for i := 0; i < int(g.mints.Load()); i++ {
 			tx, _, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, mintData, g.Config.ChainID, g.Config.Key, false)
 			if err != nil {
 				log.Error("failed to make contract call", "error", err)
@@ -118,7 +120,7 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 
 		// now share this out to some random addresses
 		transactions = transactions[:0]
-		for i := 0; i < int(g.transfers); i++ {
+		for i := 0; i < int(g.transfers.Load()); i++ {
 			receipient := randomAddress()
 
 			// Pack the transfer function call data
