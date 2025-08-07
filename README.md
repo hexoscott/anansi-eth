@@ -4,6 +4,10 @@ A trickster app to try and break Ethereum mempools
 
 ![image](./anansi-bot.webp)
 
+## Pre-requisites
+
+- you will need to install the forge tool from foundry (recommend using foundry up https://getfoundry.sh/introduction/installation)
+
 ## Running
 
 For now you will need to edit the code to adjust how many jobs run of each type using the `createJobs` function in `main.go`.

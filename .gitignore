@@ -1,3 +1,4 @@
-vscode/
+.vscode/
 anansi-eth
 .direnv
+.DS_Store
