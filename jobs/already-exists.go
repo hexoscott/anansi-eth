@@ -76,7 +76,7 @@ func (a *AlreadyExists) Run(ctx context.Context, client *ethclient.Client, log h
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
 		default:
 		}
@@ -84,7 +84,7 @@ func (a *AlreadyExists) Run(ctx context.Context, client *ethclient.Client, log h
 		err := client.SendTransaction(ctx, tx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 			if err.Error() != "ALREADY_EXISTS: already known" {
@@ -95,12 +95,6 @@ func (a *AlreadyExists) Run(ctx context.Context, client *ethclient.Client, log h
 		}
 
 		totalSent++
-
-		select {
-		case <-ticker.C:
-			log.Info("sent transactions", "total", totalSent)
-		default:
-		}
 
 		time.Sleep(50 * time.Millisecond)
 	}

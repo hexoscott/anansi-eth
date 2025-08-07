@@ -48,16 +48,11 @@ func (m *MultiSender) Run(ctx context.Context, client *ethclient.Client, log hcl
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("sent transactions", "from", m.Config.Address.Hex(), "total", totalSent)
 		default:
 		}
 

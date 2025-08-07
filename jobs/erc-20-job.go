@@ -7,18 +7,22 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/hashicorp/go-hclog"
 )
 
 type ERC20Job struct {
-	Config   ERC20JobConfig
-	done     chan struct{}
-	instance uint64
+	Config    ERC20JobConfig
+	done      chan struct{}
+	instance  uint64
+	mints     atomic.Uint64
+	transfers atomic.Uint64
 }
 
 type ERC20JobConfig struct {
@@ -27,9 +31,11 @@ type ERC20JobConfig struct {
 
 func NewERC20Job(instance uint64) (*ERC20Job, error) {
 	return &ERC20Job{
-		Config:   ERC20JobConfig{},
-		done:     make(chan struct{}),
-		instance: instance,
+		Config:    ERC20JobConfig{},
+		done:      make(chan struct{}),
+		instance:  instance,
+		mints:     1,
+		transfers: 5,
 	}, nil
 }
 
@@ -66,7 +72,6 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 	if err != nil {
 		return err
 	}
-	log.Info("parsed contract ABI successfully", "methods", len(contractABI.Methods), "events", len(contractABI.Events))
 
 	bytecode := common.FromHex(forgeCompiled.Bytecode.Object)
 
@@ -75,12 +80,12 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 		return err
 	}
 
-	log.Info("erc 20 contract deployed", "address", receipt.ContractAddress, "tx", tx.Hash().Hex())
+	log.Debug("erc 20 contract deployed", "address", receipt.ContractAddress, "tx", tx.Hash().Hex())
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
 		default:
 		}
@@ -88,7 +93,6 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 		// Example: Call the mint function using the parsed ABI
 		mintAmount := big.NewInt(1000000000000000000) // 1 token (18 decimals)
 
-		// Pack the mint function call data
 		mintData, err := contractABI.Pack("mint", mintAmount)
 		if err != nil {
 			log.Error("failed to pack mint function call", "error", err)
@@ -96,17 +100,25 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 			continue
 		}
 
-		tx, receipt, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, mintData, g.Config.ChainID, g.Config.Key, true)
-		if err != nil {
-			log.Error("failed to make contract call", "error", err)
-			time.Sleep(1 * time.Second)
-			continue
+		transactions := make([]*types.Transaction, 0)
+		for i := 0; i < int(g.mints); i++ {
+			tx, _, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, mintData, g.Config.ChainID, g.Config.Key, false)
+			if err != nil {
+				log.Error("failed to make contract call", "error", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			transactions = append(transactions, tx)
 		}
 
-		log.Info("mint function call successful", "tx", tx.Hash().Hex(), "receipt", receipt.Status)
+		_, err = waitOnReceipts(ctx, client, transactions)
+		if err != nil {
+			return err
+		}
 
-		// now share this out to 5 random addresses
-		for i := 0; i < 5; i++ {
+		// now share this out to some random addresses
+		transactions = transactions[:0]
+		for i := 0; i < int(g.transfers); i++ {
 			receipient := randomAddress()
 
 			// Pack the transfer function call data
@@ -118,13 +130,17 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 			}
 
 			// Make the transfer call
-			tx, transferReceipt, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, transferData, g.Config.ChainID, g.Config.Key, true)
+			tx, _, err := makeContractCall(ctx, client, log, *g.Config.Address, receipt.ContractAddress, transferData, g.Config.ChainID, g.Config.Key, false)
 			if err != nil {
 				log.Error("failed to transfer tokens", "error", err, "to", receipient.Hex())
 				continue
 			}
+			transactions = append(transactions, tx)
+		}
 
-			log.Info("transfer successful", "to", receipient.Hex(), "status", transferReceipt.Status, "tx", tx.Hash().Hex())
+		_, err = waitOnReceipts(ctx, client, transactions)
+		if err != nil {
+			return err
 		}
 	}
 }

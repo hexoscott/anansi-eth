@@ -46,23 +46,18 @@ func (n *NoWaitSender) Run(ctx context.Context, client *ethclient.Client, log hc
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("sent transactions", "from", n.Config.Address.Hex(), "total", totalSent)
 		default:
 		}
 
 		nonce, err := client.PendingNonceAt(ctx, *n.Config.Address)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 			return err
@@ -71,7 +66,7 @@ func (n *NoWaitSender) Run(ctx context.Context, client *ethclient.Client, log hc
 		for i := 0; i < 100; i++ {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}

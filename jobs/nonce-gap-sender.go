@@ -46,9 +46,6 @@ func (n *NonceGapSender) Run(ctx context.Context, client *ethclient.Client, log 
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	masterNonce, err := client.PendingNonceAt(ctx, *n.Config.Address)
 	if err != nil {
 		return err
@@ -62,10 +59,8 @@ func (n *NonceGapSender) Run(ctx context.Context, client *ethclient.Client, log 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("sent transactions", "from", n.Config.Address.Hex(), "total", totalSent)
 		default:
 		}
 
@@ -74,7 +69,7 @@ func (n *NonceGapSender) Run(ctx context.Context, client *ethclient.Client, log 
 		for i := 0; i < 200; i++ {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}

@@ -52,7 +52,7 @@ func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hcl
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
 		default:
 		}
@@ -60,8 +60,6 @@ func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hcl
 		if err != nil {
 			return err
 		}
-
-		log.Info("pending nonce", "nonce", nonce, "address", g.Config.Address.Hex())
 
 		// first deploy the contract
 		deployCode := common.FromHex(byteCode)
@@ -74,7 +72,7 @@ func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hcl
 		err = client.SendTransaction(ctx, deployTx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 			return err
@@ -84,14 +82,12 @@ func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hcl
 		receipt, err := waitForReceipt(ctx, client, deployTx.Hash())
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 			return err
 		}
 		contractAddress = receipt.ContractAddress
-
-		log.Info("deployed filler contract", "address", contractAddress.Hex())
 
 		// now loop 240 times to slowly remove from the contract state and leave 10 items behind to slowly build up the state tree
 		hashes := []common.Hash{}
@@ -111,15 +107,11 @@ func (g *StateFiller) Run(ctx context.Context, client *ethclient.Client, log hcl
 			hashes = append(hashes, tx.Hash())
 		}
 
-		log.Info("sent delete transactions")
-
 		// now wait for all the transactions to be mined
 		err = waitUntilMined(ctx, client, hashes)
 		if err != nil {
 			return err
 		}
-
-		log.Info("mined transactions")
 	}
 }
 

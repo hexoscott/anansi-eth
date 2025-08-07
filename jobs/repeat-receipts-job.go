@@ -47,13 +47,10 @@ func (g *RepeatReceiptsJob) Run(ctx context.Context, client *ethclient.Client, l
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
 		default:
 		}
@@ -85,7 +82,7 @@ func (g *RepeatReceiptsJob) Run(ctx context.Context, client *ethclient.Client, l
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}
@@ -93,7 +90,7 @@ func (g *RepeatReceiptsJob) Run(ctx context.Context, client *ethclient.Client, l
 			receipt, err := client.TransactionReceipt(ctx, tx.Hash())
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
-					log.Info("received signal, stopping")
+					log.Debug("received signal, stopping")
 					return nil
 				}
 				if errors.Is(err, ethereum.NotFound) {
@@ -126,12 +123,6 @@ func (g *RepeatReceiptsJob) Run(ctx context.Context, client *ethclient.Client, l
 		}
 
 		totalSent++
-
-		select {
-		case <-ticker.C:
-			log.Info("sent transactions", "from", g.Config.Address.Hex(), "total", totalSent)
-		default:
-		}
 	}
 }
 

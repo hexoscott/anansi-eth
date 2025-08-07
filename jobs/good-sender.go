@@ -47,13 +47,10 @@ func (g *GoodSender) Run(ctx context.Context, client *ethclient.Client, log hclo
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
 		default:
 		}
@@ -84,7 +81,7 @@ func (g *GoodSender) Run(ctx context.Context, client *ethclient.Client, log hclo
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}
@@ -92,7 +89,7 @@ func (g *GoodSender) Run(ctx context.Context, client *ethclient.Client, log hclo
 			receipt, err := client.TransactionReceipt(ctx, tx.Hash())
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
-					log.Info("received signal, stopping")
+					log.Debug("received signal, stopping")
 					return nil
 				}
 				if errors.Is(err, ethereum.NotFound) {
@@ -117,12 +114,6 @@ func (g *GoodSender) Run(ctx context.Context, client *ethclient.Client, log hclo
 				log.Warn("transaction failed", "hash", tx.Hash().Hex())
 				break
 			}
-		}
-
-		select {
-		case <-ticker.C:
-			log.Info("sent transactions", "from", g.Config.Address.Hex(), "total", totalSent)
-		default:
 		}
 	}
 }

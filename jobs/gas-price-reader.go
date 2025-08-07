@@ -50,17 +50,15 @@ func (a *GasPriceReader) Run(ctx context.Context, client *ethclient.Client, log 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("read gas price", "total", totalRead)
 		default:
 		}
 
 		_, err := client.SuggestGasPrice(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 

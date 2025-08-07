@@ -50,25 +50,20 @@ func (n *NonceOverlapSender) Run(ctx context.Context, client *ethclient.Client, 
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	randomAddress := common.HexToAddress(fmt.Sprintf("0x%x", rand.Intn(1000000000000000000)))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("sent transactions", "from", n.masterAddress.Hex(), "total", totalSent)
 		default:
 		}
 
 		nonce, err := client.PendingNonceAt(ctx, *n.masterAddress)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			}
 			return err
@@ -85,7 +80,7 @@ func (n *NonceOverlapSender) Run(ctx context.Context, client *ethclient.Client, 
 		for i := 0; i < 5; i++ {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}
@@ -100,7 +95,7 @@ func (n *NonceOverlapSender) Run(ctx context.Context, client *ethclient.Client, 
 			err = client.SendTransaction(ctx, tx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
-					log.Info("received signal, stopping")
+					log.Debug("received signal, stopping")
 					return nil
 				}
 				if err.Error() != "ALREADY_EXISTS: already known" {

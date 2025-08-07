@@ -165,6 +165,29 @@ func makeContractCall(
 	return tx, receipt, nil
 }
 
+func waitOnReceipts(ctx context.Context, client *ethclient.Client, transactions []*types.Transaction) ([]*types.Receipt, error) {
+	result := make([]*types.Receipt, 0)
+	for _, transaction := range transactions {
+		for i := 0; i < 10; i++ {
+			receipt, err := client.TransactionReceipt(ctx, transaction.Hash())
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					time.Sleep(1 * time.Second)
+					continue
+				}
+
+				return nil, err
+			}
+
+			if receipt.Status == types.ReceiptStatusSuccessful {
+				result = append(result, receipt)
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 func randomAddress() common.Address {
 	randomBytes := make([]byte, 20)
 	_, err := rand.Read(randomBytes)

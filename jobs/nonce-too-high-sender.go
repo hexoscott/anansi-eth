@@ -45,16 +45,11 @@ func (n *NonceTooHighSender) Run(ctx context.Context, client *ethclient.Client, 
 
 	totalSent := 0
 
-	ticker := time.NewTicker(logInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("received signal, stopping")
+			log.Debug("received signal, stopping")
 			return nil
-		case <-ticker.C:
-			log.Info("sent transactions", "from", n.Config.Address.Hex(), "total", totalSent)
 		default:
 		}
 
@@ -72,7 +67,7 @@ func (n *NonceTooHighSender) Run(ctx context.Context, client *ethclient.Client, 
 		for i := 0; i < 100; i++ {
 			select {
 			case <-ctx.Done():
-				log.Info("received signal, stopping")
+				log.Debug("received signal, stopping")
 				return nil
 			default:
 			}

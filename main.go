@@ -166,7 +166,7 @@ func main() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1)
 	sig := <-ch
-	log.Info("received signal", "signal", sig.String())
+	log.Debug("received signal", "signal", sig.String())
 
 	cancelJobs()
 
