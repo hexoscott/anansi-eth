@@ -1,9 +1,13 @@
 {
-        "jobs": [
-            {
-                "type": "ERC20Job",
-                "count": 2
-            }
-        ]
+    "jobs": [
+        {
+            "type": "ERC20Job",
+            "count": 50
+        }
+    ],
+    "stabilization_config": {
+        "min_samples": 5,
+        "stability_threshold_percent": 10.0,
+        "stability_required_duration": 4
     }
-    
+}

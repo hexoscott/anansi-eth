@@ -33,12 +33,19 @@ type JobConfig struct {
 }
 
 type JobFile struct {
-	Jobs []JobJsonDefinition `json:"jobs"`
+	Jobs                []JobJsonDefinition  `json:"jobs"`
+	StabilizationConfig *StabilizationConfig `json:"stabilization_config,omitempty"`
 }
 
 type JobJsonDefinition struct {
 	Count int    `json:"count"`
 	Type  string `json:"type"`
+}
+
+type StabilizationConfig struct {
+	MinSamples                int     `json:"min_samples"`                 // Minimum samples needed before checking stability
+	StabilityThresholdPercent float64 `json:"stability_threshold_percent"` // Standard deviation should be within this % of mean for stability
+	StabilityRequiredDuration int     `json:"stability_required_duration"` // Number of consecutive stable measurements required
 }
 
 type LoadIndicator uint64

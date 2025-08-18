@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
+	"math"
 	"math/big"
 	"time"
 
@@ -14,17 +15,59 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
+// Default stabilization detection constants
+const (
+	defaultMinSamplesForStabilization = 20  // Minimum samples needed before checking stability
+	defaultStabilityThresholdPercent  = 5.0 // Standard deviation should be within 5% of mean for stability
+	defaultStabilityRequiredDuration  = 10  // Number of consecutive stable measurements required
+)
+
 type Monitor struct {
 	Job
-	done chan struct{}
-	jobs []Job
+	done                   chan struct{}
+	jobs                   []Job
+	lastBlock              uint64
+	transactionCounts      []int
+	isStabilized           bool
+	consecutiveStableCount int
+	lastStdDev             float64
+	lastMean               float64
+
+	// Configurable stabilization parameters
+	minSamplesForStabilization int
+	stabilityThresholdPercent  float64
+	stabilityRequiredDuration  int
 }
 
 func NewMonitor(jobs []Job) (*Monitor, error) {
-	return &Monitor{
-		done: make(chan struct{}),
-		jobs: jobs,
-	}, nil
+	return NewMonitorWithConfig(jobs, nil)
+}
+
+func NewMonitorWithConfig(jobs []Job, config *StabilizationConfig) (*Monitor, error) {
+	monitor := &Monitor{
+		done:              make(chan struct{}),
+		jobs:              jobs,
+		transactionCounts: make([]int, 0),
+		// Set defaults
+		minSamplesForStabilization: defaultMinSamplesForStabilization,
+		stabilityThresholdPercent:  defaultStabilityThresholdPercent,
+		stabilityRequiredDuration:  defaultStabilityRequiredDuration,
+	}
+
+	// Override with config if provided
+	if config != nil {
+		if config.MinSamples > 0 {
+			monitor.minSamplesForStabilization = config.MinSamples
+		}
+		if config.StabilityThresholdPercent > 0 {
+			monitor.stabilityThresholdPercent = config.StabilityThresholdPercent
+		}
+		if config.StabilityRequiredDuration > 0 {
+			monitor.stabilityRequiredDuration = config.StabilityRequiredDuration
+		}
+	}
+
+	return monitor, nil
 }
 
 func (j *Monitor) Name() string {
@@ -34,6 +77,15 @@ func (j *Monitor) Name() string {
 func (j *Monitor) Run(ctx context.Context, client *ethclient.Client, log hclog.Logger) error {
 	defer close(j.done)
 	log = log.With("job", j.Name())
+	// lastPending := uint64(0)
+
+	// get the latest block so we can start to capture some load related data as the loop runs
+	latestBlock, err := client.BlockByNumber(ctx, nil)
+	if err != nil {
+		return err
+	}
+	j.lastBlock = latestBlock.NumberU64()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -64,8 +116,7 @@ func (j *Monitor) Run(ctx context.Context, client *ethclient.Client, log hclog.L
 			continue
 		}
 
-		log.Info("txpool_status", "baseFee", baseFee, "pending", pending, "queued", queued)
-
+		var totalTransactions uint64 = 0
 		stats := make(map[string]map[string]uint64)
 		for _, job := range j.jobs {
 			name := job.Name()
@@ -77,24 +128,69 @@ func (j *Monitor) Run(ctx context.Context, client *ethclient.Client, log hclog.L
 			}
 			for k, v := range s {
 				found[k] = found[k] + v
+				totalTransactions += v
 			}
 		}
 
-		if pending <= 100 {
-			log.Info("updating load - increasing")
-			for _, job := range j.jobs {
-				job.UpdateLoad(LoadIncrease)
-			}
-		} else if pending > 0 {
-			log.Info("updating load - decreasing")
-			for _, job := range j.jobs {
-				job.UpdateLoad(LoadDecrease)
-			}
+		log.Info("txpool_status", "baseFee", baseFee, "pending", pending, "queued", queued)
+		log.Info("current load per run", "total", totalTransactions)
+
+		latestBlock, err := client.BlockByNumber(ctx, nil)
+		if err != nil {
+			log.Error("failed to get latest block", "error", err)
+			time.Sleep(3 * time.Second)
+			continue
 		}
+		latestNumber := latestBlock.NumberU64()
+		latestTxCount := len(latestBlock.Transactions())
 
 		log.Info("load stats report", "report", stats)
 
-		time.Sleep(3 * time.Second)
+		if latestNumber > j.lastBlock {
+			j.transactionCounts = append(j.transactionCounts, latestTxCount)
+			if len(j.transactionCounts) > j.minSamplesForStabilization {
+				j.transactionCounts = j.transactionCounts[1:] // remove the oldest value
+			}
+
+			// Check for stabilization
+			j.checkStabilization()
+			mean, stdDev, consecutiveStable, coefficientOfVariation := j.GetStabilizationMetrics()
+
+			if j.isStabilized && consecutiveStable > j.stabilityRequiredDuration {
+				log.Info("🎯 TRANSACTION RATE STABILIZED!",
+					"mean", mean,
+					"stdDev", stdDev,
+					"coefficientOfVariation%", coefficientOfVariation,
+					"consecutiveStableMeasurements", consecutiveStable)
+
+				log.Info("🔥 increasing load!")
+				for _, job := range j.jobs {
+					job.UpdateLoad(LoadIncrease)
+				}
+			}
+
+			// Enhanced logging with stabilization metrics
+			if len(j.transactionCounts) >= j.minSamplesForStabilization {
+				log.Info("transaction analysis",
+					"blockCount", len(j.transactionCounts),
+					"mean", mean,
+					"stdDev", stdDev,
+					"coefficientOfVariation%", coefficientOfVariation,
+					"isStabilized", j.isStabilized,
+					"consecutiveStable", consecutiveStable)
+			} else {
+				log.Info("transaction analysis (collecting samples)",
+					"blockCount", len(j.transactionCounts),
+					"mean", mean,
+					"samplesNeeded", j.minSamplesForStabilization-len(j.transactionCounts))
+			}
+		}
+
+		j.lastBlock = latestNumber
+
+		// lastPending = pending
+
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -139,4 +235,75 @@ func (j *Monitor) Instance() uint64 {
 func (j *Monitor) WalletAddress() *common.Address {
 	address := common.HexToAddress("0x0000000000000000000000000000000000000000")
 	return &address
+}
+
+// calculateStandardDeviation calculates the standard deviation of transaction counts
+func (j *Monitor) calculateStandardDeviation() (mean, stdDev float64) {
+	if len(j.transactionCounts) == 0 {
+		return 0, 0
+	}
+
+	// Calculate mean
+	sum := 0
+	for _, count := range j.transactionCounts {
+		sum += count
+	}
+	mean = float64(sum) / float64(len(j.transactionCounts))
+
+	// Calculate variance
+	variance := 0.0
+	for _, count := range j.transactionCounts {
+		diff := float64(count) - mean
+		variance += diff * diff
+	}
+	variance /= float64(len(j.transactionCounts))
+
+	// Standard deviation is the square root of variance
+	stdDev = math.Sqrt(variance)
+
+	return mean, stdDev
+}
+
+// checkStabilization determines if the transaction count has stabilized
+func (j *Monitor) checkStabilization() bool {
+	// Need minimum samples to determine stability
+	if len(j.transactionCounts) < j.minSamplesForStabilization {
+		return false
+	}
+
+	mean, stdDev := j.calculateStandardDeviation()
+	j.lastMean = mean
+	j.lastStdDev = stdDev
+
+	// Calculate coefficient of variation (standard deviation as percentage of mean)
+	if mean == 0 {
+		return false
+	}
+
+	coefficientOfVariation := (stdDev / mean) * 100
+
+	// Check if the coefficient of variation is within our stability threshold
+	isCurrentlyStable := coefficientOfVariation <= j.stabilityThresholdPercent
+
+	if isCurrentlyStable {
+		j.consecutiveStableCount++
+	} else {
+		j.consecutiveStableCount = 0
+	}
+
+	// Consider stabilized if we've had enough consecutive stable measurements
+	wasStabilized := j.isStabilized
+	j.isStabilized = j.consecutiveStableCount >= j.stabilityRequiredDuration
+
+	return j.isStabilized && !wasStabilized // Return true only on the transition to stabilized
+}
+
+// GetStabilizationMetrics returns current stabilization metrics for monitoring/debugging
+func (j *Monitor) GetStabilizationMetrics() (mean, stdDev float64, consecutiveStable int, coefficientOfVariation float64) {
+	mean, stdDev = j.calculateStandardDeviation()
+	coefficientOfVariation = 0
+	if mean > 0 {
+		coefficientOfVariation = (stdDev / mean) * 100
+	}
+	return mean, stdDev, j.consecutiveStableCount, coefficientOfVariation
 }

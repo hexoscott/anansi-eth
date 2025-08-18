@@ -100,13 +100,18 @@ func main() {
 	}
 	log.Info("suggested gas price", "price", gasPrice)
 
+	jobFile, err := parseJobFile(jobFile)
+	if err != nil {
+		log.Error("failed to parse job file", "error", err)
+		return
+	}
 	allJobs, err := createJobs(jobFile, parentKey, &parentAddress)
 	if err != nil {
 		log.Error("failed to create jobs", "error", err)
 		return
 	}
 
-	monitor, err := jobs.NewMonitor(allJobs)
+	monitor, err := jobs.NewMonitorWithConfig(allJobs, jobFile.StabilizationConfig)
 	if err != nil {
 		log.Error("error creating monitor job")
 		return
@@ -193,11 +198,7 @@ func main() {
 	}
 }
 
-func createJobs(jobFileLocation string, parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]jobs.Job, error) {
-	jobFile, err := parseJobFile(jobFileLocation)
-	if err != nil {
-		return nil, err
-	}
+func createJobs(jobFile *jobs.JobFile, parentKey *ecdsa.PrivateKey, parentAddress *common.Address) ([]jobs.Job, error) {
 
 	result := []jobs.Job{}
 	var instance uint64 = 0

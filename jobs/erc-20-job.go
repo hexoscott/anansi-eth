@@ -112,13 +112,7 @@ func (g *ERC20Job) Run(ctx context.Context, client *ethclient.Client, log hclog.
 			transactions = append(transactions, tx)
 		}
 
-		_, err = waitOnReceipts(ctx, client, transactions)
-		if err != nil {
-			return err
-		}
-
 		// now share this out to some random addresses
-		transactions = transactions[:0]
 		for i := 0; i < int(g.transfers.Load()); i++ {
 			receipient := randomAddress()
 
@@ -174,18 +168,19 @@ func (g *ERC20Job) GiveLoadStats() map[string]uint64 {
 }
 
 func (g *ERC20Job) UpdateLoad(indicator LoadIndicator) {
+	const jumpAmount = 5
 	switch indicator {
 	case LoadIncrease:
-		g.mints.Add(1)
-		g.transfers.Add(1)
+		g.mints.Add(jumpAmount)
+		g.transfers.Add(jumpAmount)
 	case LoadDecrease:
 		currentMints := g.mints.Load()
 		if currentMints > 1 {
-			g.mints.Store(currentMints - 1)
+			g.mints.Store(currentMints - jumpAmount)
 		}
 		currentTransfers := g.transfers.Load()
 		if currentTransfers > 1 {
-			g.transfers.Store(currentTransfers - 1)
+			g.transfers.Store(currentTransfers - jumpAmount)
 		}
 	}
 }
